@@ -1,0 +1,18 @@
+TC001:
+  name: "Login valid"
+  tags: ["smoke","sanity"]
+  testData: "login_valid"
+
+  steps:
+    - class: "otherTest.LoginTest"
+      method: "testLogin"
+
+
+TC002:
+  name: "Login with invalid"
+  tags: ["regression"]
+  testData: "login_invalid"
+
+  steps:
+    - class: "otherTest.LoginTest"
+      method: "testLogin"

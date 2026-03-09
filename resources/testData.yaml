@@ -1,0 +1,15 @@
+login_valid:
+    - iteration: "1"
+      email: "rahulshettyacademy"
+      password: "Learning@830$3mK2"
+
+login_invalid:
+    - iteration: "1"
+      email: "rahulshettyacademy"
+      password: ""
+    - iteration: "2"
+      email: ""
+      password: "Learning"
+    - iteration: "3"
+      email: ""
+      password: ""

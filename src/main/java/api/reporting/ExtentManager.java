@@ -17,7 +17,7 @@ public class ExtentManager {
 
 	private static String getTimeStamp() {
 		Date date = new Date();
-		DateFormat df = new SimpleDateFormat("HH-mm-ss_dd-MMM-yy");
+		DateFormat df = new SimpleDateFormat("yyyyMMdd_HHmmss");
 		return df.format(date);
 	}
 
@@ -27,38 +27,72 @@ public class ExtentManager {
 
 			String workingDir = System.getProperty("user.dir");
 
+			// Create ExtentReports directory if it doesn't exist
+			String reportsDir = workingDir + File.separator + "ExtentReports";
+			new File(reportsDir).mkdirs();
+
 			String reportPath;
-
-			if (FileReaderManager.getInstance()
+			String overrideReport = FileReaderManager.getInstance()
 					.getConfigReader()
-					.get("overrideReport")
-					.equalsIgnoreCase("yes")) {
+					.get("overrideReport", "false");
 
-				reportPath = workingDir + File.separator
-						+ "ExtentReports"
-						+ File.separator
+			// Support both "true" and "yes" values
+			if (overrideReport.equalsIgnoreCase("true")
+					|| overrideReport.equalsIgnoreCase("yes")) {
+
+				reportPath = reportsDir + File.separator
 						+ "ExtentReport_" + getTimeStamp() + ".html";
 
 			} else {
 
-				reportPath = workingDir + File.separator
-						+ "ExtentReports"
-						+ File.separator
-						+ "ExtentReport.html";
+				reportPath = reportsDir + File.separator + "ExtentReport.html";
 			}
 
 			ExtentSparkReporter reporter = new ExtentSparkReporter(reportPath);
 
-			File xmlConfig = new File(workingDir + File.separator + "extent-config.xml");
+			// Try multiple paths for extent-config.xml
+			File xmlConfig = findConfigFile(workingDir, "extent-config.xml");
 
-			if (xmlConfig.exists()) {
+			if (xmlConfig != null && xmlConfig.exists()) {
 				reporter.loadXMLConfig(xmlConfig);
+				System.out.println("Loaded Extent Report config: " + xmlConfig.getAbsolutePath());
+			} else {
+				System.out.println("Extent Report config not found, using defaults");
 			}
 
 			extent = new ExtentReports();
 			extent.attachReporter(reporter);
+
+			System.out.println("Extent Report initialized: " + reportPath);
 		}
 
 		return extent;
+	}
+
+	/**
+	 * Find config file in various locations
+	 */
+	private static File findConfigFile(String workingDir, String fileName) {
+		String[] possiblePaths = {
+			workingDir + File.separator + fileName,
+			workingDir + File.separator + "src" + File.separator + fileName,
+			workingDir + File.separator + "resources" + File.separator + fileName,
+			fileName
+		};
+
+		for (String path : possiblePaths) {
+			File file = new File(path);
+			if (file.exists()) {
+				return file;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Get the ExtentReports directory path
+	 */
+	public static String getReportDirectory() {
+		return System.getProperty("user.dir") + File.separator + "ExtentReports";
 	}
 }

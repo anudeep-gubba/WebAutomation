@@ -1,45 +1,145 @@
 name: Web Automation Tests
 
 on:
+  # Run on push to main/master/develop branches
   push:
     branches: [ main, master, develop ]
+
+  # Run on pull requests
   pull_request:
     branches: [ main, master, develop ]
+
+  # Manual trigger with custom parameters
   workflow_dispatch:
     inputs:
+      test_suite:
+        description: 'Test Suite (smoke/regression/all)'
+        required: false
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - regression
+          - all
       browser:
-        description: 'Browser (chrome/firefox/edge)'
+        description: 'Browser'
         required: false
-        default: 'chrome'
-      tags:
-        description: 'Test tags to run (comma-separated: smoke,sanity,regression)'
-        required: false
-        default: ''
-      tests:
-        description: 'Specific test IDs to run (comma-separated: TC001,TC002)'
-        required: false
-        default: ''
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - chrome
+          - firefox
+          - edge
       threads:
-        description: 'Number of parallel threads'
+        description: 'Parallel Threads'
         required: false
         default: '5'
+        type: number
       env:
-        description: 'Environment (qa,staging,prod)'
+        description: 'Environment'
         required: false
         default: 'qa'
-      override_report:
-        description: 'Override existing report (true/false)'
+        type: choice
+        options:
+          - qa
+          - staging
+          - prod
+      parallel:
+        description: 'Enable Parallel Execution'
         required: false
         default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      override_report:
+        description: 'Override Existing Report'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+  # Scheduled regression run daily at 2:00 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
 
 env:
   JAVA_VERSION: '17'
   MAVEN_OPTS: -Xmx1024m
 
 jobs:
-  test:
+  # ============================================
+  # SMOKE TESTS - Runs on every push
+  # ============================================
+  smoke-tests:
+    name: Smoke Tests (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox, edge]
+
+    services:
+      selenium:
+        image: selenium/standalone-${{ matrix.browser }}:latest
+        ports:
+          - 4444:4444
+        options: --shm-size="2g"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Download dependencies
+        run: mvn dependency:go-offline -B -DskipTests
+
+      - name: Create output directories
+        run: mkdir -p ExtentReports test-output screenshots
+
+      - name: Compile project
+        run: mvn clean test-compile -B -q
+
+      - name: Run Smoke Tests on ${{ matrix.browser }}
+        run: |
+          mvn exec:java -B \
+            -Dexec.mainClass="otherTest.TestRunner" \
+            -Dtags="smoke" \
+            -Dbrowser="${{ matrix.browser }}" \
+            -Dthreads="3" \
+            -Denv="qa" \
+            -DoverrideReport="true" \
+            -Dparallel="true"
+
+      - name: Upload Smoke Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results-${{ matrix.browser }}
+          path: |
+            test-output/
+            ExtentReports/
+            screenshots/
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ============================================
+  # REGRESSION TESTS - Scheduled daily
+  # ============================================
+  regression-tests:
+    name: Regression Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.test_suite == 'regression' || github.event.inputs.test_suite == 'all'
+
     services:
       selenium:
         image: selenium/standalone-chrome:latest
@@ -51,120 +151,162 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Get dependencies
+      - name: Download dependencies
         run: mvn dependency:go-offline -B -DskipTests
 
-      - name: Create directories
+      - name: Create output directories
         run: mkdir -p ExtentReports test-output screenshots
 
-      - name: Compile and Run Tests
+      - name: Compile project
+        run: mvn clean test-compile -B -q
+
+      - name: Run Regression Tests
         run: |
-          echo "=== Compiling project ==="
-          mvn clean test-compile -B
-          
-          echo ""
-          echo "=== Running tests ==="
           mvn exec:java -B \
             -Dexec.mainClass="otherTest.TestRunner" \
-            -Dtags="${{ github.event.inputs.tags || '' }}" \
-            -Dtests="${{ github.event.inputs.tests || '' }}" \
+            -Dtags="smoke,sanity,regression" \
             -Dbrowser="${{ github.event.inputs.browser || 'chrome' }}" \
             -Dthreads="${{ github.event.inputs.threads || '5' }}" \
             -Denv="${{ github.event.inputs.env || 'qa' }}" \
-            -DoverrideReport="${{ github.event.inputs.override_report || 'true' }}" \
-            -Dparallel="true"
+            -DoverrideReport="true" \
+            -Dparallel="${{ github.event.inputs.parallel || 'true' }}"
 
-      - name: List generated files
-        run: |
-          echo "=== ExtentReports contents ==="
-          ls -la ExtentReports/ || echo "Directory not found"
-          echo ""
-          echo "=== Test output contents ==="
-          ls -la test-output/ || echo "Directory not found"
-
-      - name: Upload Test Results
+      - name: Upload Regression Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ github.run_id }}
+          name: regression-results-${{ github.run_id }}
           path: |
             test-output/
-            **/*.xml
-          retention-days: 14
-          if-no-files-found: warn
-
-      - name: Upload Extent Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: extent-reports-${{ github.run_id }}
-          path: ExtentReports/
+            ExtentReports/
+            screenshots/
           retention-days: 30
           if-no-files-found: warn
 
-      - name: Upload Screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-screenshots-${{ github.run_id }}
-          path: screenshots/
-          retention-days: 14
-          if-no-files-found: warn
-
-  test-cross-browser:
+  # ============================================
+  # CUSTOM TESTS - Manual trigger with params
+  # ============================================
+  custom-tests:
+    name: Custom Tests (${{ github.event.inputs.test_suite || 'smoke' }} on ${{ github.event.inputs.browser || 'chrome' }})
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        browser: [chrome, firefox]
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.test_suite != '' || github.event.inputs.browser != 'all')
+
+    services:
+      selenium:
+        image: selenium/standalone-${{ github.event.inputs.browser || 'chrome' }}:latest
+        ports:
+          - 4444:4444
+        options: --shm-size="2g"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Get dependencies
+      - name: Download dependencies
         run: mvn dependency:go-offline -B -DskipTests
 
-      - name: Create directories
-        run: |
-          mkdir -p ExtentReports test-output screenshots
+      - name: Create output directories
+        run: mkdir -p ExtentReports test-output screenshots
 
-      - name: Compile and Run Tests on ${{ matrix.browser }}
+      - name: Compile project
+        run: mvn clean test-compile -B -q
+
+      - name: Display custom parameters
         run: |
-          echo "=== Compiling project ==="
-          mvn clean test-compile -B
+          echo "========================================"
+          echo "  Custom Test Run Parameters"
+          echo "========================================"
+          echo "  Test Suite: ${{ github.event.inputs.test_suite || 'smoke' }}"
+          echo "  Browser: ${{ github.event.inputs.browser || 'chrome' }}"
+          echo "  Threads: ${{ github.event.inputs.threads || '5' }}"
+          echo "  Environment: ${{ github.event.inputs.env || 'qa' }}"
+          echo "  Parallel: ${{ github.event.inputs.parallel || 'true' }}"
+          echo "========================================"
+
+      - name: Run Custom Tests
+        run: |
+          TAGS="smoke"
+          if [ "${{ github.event.inputs.test_suite }}" == "regression" ]; then
+            TAGS="smoke,sanity,regression"
+          elif [ "${{ github.event.inputs.test_suite }}" == "all" ]; then
+            TAGS="smoke,sanity,regression"
+          elif [ "${{ github.event.inputs.test_suite }}" == "sanity" ]; then
+            TAGS="sanity"
+          fi
           
-          echo ""
-          echo "=== Running tests on ${{ matrix.browser }} ==="
           mvn exec:java -B \
             -Dexec.mainClass="otherTest.TestRunner" \
-            -Dtags="smoke" \
-            -Dbrowser="${{ matrix.browser }}" \
-            -Dthreads="3" \
-            -Denv="qa" \
-            -DoverrideReport="true" \
-            -Dparallel="true"
-        continue-on-error: true
+            -Dtags="$TAGS" \
+            -Dbrowser="${{ github.event.inputs.browser || 'chrome' }}" \
+            -Dthreads="${{ github.event.inputs.threads || '5' }}" \
+            -Denv="${{ github.event.inputs.env || 'qa' }}" \
+            -DoverrideReport="${{ github.event.inputs.override_report || 'true' }}" \
+            -Dparallel="${{ github.event.inputs.parallel || 'true' }}"
 
-      - name: Upload Results for ${{ matrix.browser }}
+      - name: Upload Custom Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.browser }}-${{ github.run_id }}
+          name: custom-test-results-${{ github.run_id }}
           path: |
             test-output/
             ExtentReports/
-          retention-days: 7          if-no-files-found: warn
+            screenshots/
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ============================================
+  # PUBLISH EXTENT REPORT TO GITHUB PAGES
+  # ============================================
+  publish-report:
+    name: Publish Extent Report
+    runs-on: ubuntu-latest
+    needs: [smoke-tests]
+    if: always()
+    permissions:
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create directories
+        run: mkdir -p ExtentReports
+
+      - name: Download smoke test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-reports
+          pattern: smoke-results-*
+          merge-multiple: true
+
+      - name: List downloaded reports
+        run: |
+          echo "=== Downloaded Reports ==="
+          ls -la downloaded-reports/ExtentReports/ 2>/dev/null || echo "No ExtentReports found"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Extent Report artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: downloaded-reports/ExtentReports/
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

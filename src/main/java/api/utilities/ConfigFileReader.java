@@ -33,36 +33,54 @@ public class ConfigFileReader {
     }
 
     private void loadProperties() {
-        BufferedReader reader;
+        BufferedReader reader = null;
         String baseDir = System.getProperty("user.dir");
 
-        try {
-            Path customPath = Paths.get(propertyFilePath);
+        String[] possiblePaths = {
+            propertyFilePath,
+            baseDir + "/" + propertyFilePath,
+            baseDir + "/resources/" + propertyFilePath,
+            "resources/" + propertyFilePath,
+            "src/main/resources/" + propertyFilePath
+        };
 
-            // First try: absolute path or relative to current dir
-            if (Files.exists(customPath)) {
-                reader = new BufferedReader(new FileReader(propertyFilePath));
-            }
-            // Second try: from classpath
-            else {
-                InputStream is = getClass().getClassLoader().getResourceAsStream(propertyFilePath);
-                if (is == null) {
-                    // Third try: default location
-                    reader = new BufferedReader(new FileReader(baseDir + "/" + propertyFilePath));
-                } else {
-                    reader = new BufferedReader(new InputStreamReader(is));
-                }
-            }
+        boolean loaded = false;
 
-            properties = new Properties();
+        for (String path : possiblePaths) {
             try {
-                properties.load(reader);
-                reader.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+                Path filePath = Paths.get(path);
+                if (Files.exists(filePath)) {
+                    reader = new BufferedReader(new FileReader(path));
+                    this.propertyFilePath = path;
+                    System.out.println("Loading config from: " + path);
+                    loaded = true;
+                    break;
+                }
+            } catch (Exception e) {
+                // Continue to next path
             }
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException("Could not find config file: " + propertyFilePath);
+        }
+
+        // Try classpath as last resort
+        if (!loaded) {
+            InputStream is = getClass().getClassLoader().getResourceAsStream(propertyFilePath);
+            if (is != null) {
+                reader = new BufferedReader(new InputStreamReader(is));
+                System.out.println("Loading config from classpath: " + propertyFilePath);
+                loaded = true;
+            }
+        }
+
+        if (reader == null) {
+            throw new RuntimeException("Could not find config file: " + propertyFilePath + " in paths: " + String.join(", ", possiblePaths));
+        }
+
+        properties = new Properties();
+        try {
+            properties.load(reader);
+            reader.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 

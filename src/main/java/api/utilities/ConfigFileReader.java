@@ -6,104 +6,69 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Properties;
 
 public class ConfigFileReader {
     private Properties properties;
-    private String propertyFilePath;
+    private final String propertyFilePath = "config.properties";
 
-    /**
-     * Default constructor - uses config.properties from user.dir
-     */
     public ConfigFileReader() {
-        this.propertyFilePath = "config.properties";
-        loadProperties();
-    }
-
-    /**
-     * Constructor with custom config file path - for CI/CD overrides
-     * @param customPath path to custom config file
-     */
-    public ConfigFileReader(String customPath) {
-        this.propertyFilePath = customPath;
-        loadProperties();
-    }
-
-    private void loadProperties() {
-        BufferedReader reader = null;
         String baseDir = System.getProperty("user.dir");
 
         String[] possiblePaths = {
-            propertyFilePath,
+            baseDir + "/target/classes/" + propertyFilePath,
+            baseDir + "/src/main/resources/" + propertyFilePath,
             baseDir + "/" + propertyFilePath,
-            baseDir + "/resources/" + propertyFilePath,
-            "resources/" + propertyFilePath,
-            "src/main/resources/" + propertyFilePath
+            propertyFilePath
         };
 
-        boolean loaded = false;
+        BufferedReader reader = null;
+        String loadedPath = null;
 
         for (String path : possiblePaths) {
             try {
-                Path filePath = Paths.get(path);
-                if (Files.exists(filePath)) {
-                    reader = new BufferedReader(new FileReader(path));
-                    this.propertyFilePath = path;
-                    System.out.println("Loading config from: " + path);
-                    loaded = true;
-                    break;
-                }
-            } catch (Exception e) {
-                // Continue to next path
+                FileReader fr = new FileReader(path);
+                reader = new BufferedReader(fr);
+                loadedPath = path;
+                break;
+            } catch (FileNotFoundException e) {
+                // Try next path
             }
         }
 
         // Try classpath as last resort
-        if (!loaded) {
+        if (reader == null) {
             InputStream is = getClass().getClassLoader().getResourceAsStream(propertyFilePath);
             if (is != null) {
                 reader = new BufferedReader(new InputStreamReader(is));
-                System.out.println("Loading config from classpath: " + propertyFilePath);
-                loaded = true;
+                loadedPath = "classpath:" + propertyFilePath;
             }
         }
 
         if (reader == null) {
-            throw new RuntimeException("Could not find config file: " + propertyFilePath + " in paths: " + String.join(", ", possiblePaths));
+            throw new RuntimeException("Could not find config file: " + propertyFilePath);
         }
 
         properties = new Properties();
         try {
             properties.load(reader);
             reader.close();
+            System.out.println("Config loaded from: " + loadedPath);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     public String get(String propertyName) {
-        // System property takes precedence (for CI/CD overrides)
-        String systemValue = System.getProperty(propertyName);
-        if (systemValue != null && !systemValue.isEmpty()) {
-            return systemValue;
-        }
         String value = this.properties.getProperty(propertyName);
         if(value != null) {
             return value;
         } else {
-            throw new RuntimeException("Given property '" + propertyName + "' not found in config file "+ propertyFilePath);
+            throw new RuntimeException("Given property '" + propertyName + "' not found in config file");
         }
     }
 
     public String get(String propertyName, String defaultValue) {
-        // System property takes precedence (for CI/CD overrides)
-        String systemValue = System.getProperty(propertyName);
-        if (systemValue != null && !systemValue.isEmpty()) {
-            return systemValue;
-        }
         String value = this.properties.getProperty(propertyName, defaultValue);
         return value;
     }

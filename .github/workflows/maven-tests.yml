@@ -32,6 +32,10 @@ on:
         required: false
         default: 'true'
 
+env:
+  JAVA_VERSION: '17'
+  MAVEN_OPTS: -Xmx1024m
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -47,64 +51,77 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
 
       - name: Get dependencies
-        run: mvn dependency:go-offline -B
+        run: mvn dependency:go-offline -B -DskipTests
 
-      - name: Run Tests
+      - name: Create directories
+        run: mkdir -p ExtentReports test-output screenshots
+
+      - name: Compile and Run Tests
         run: |
-          mvn test -B \
-            -Dtest=otherTest.TestRunner \
+          echo "=== Compiling project ==="
+          mvn clean test-compile -B
+          
+          echo ""
+          echo "=== Running tests ==="
+          mvn exec:java -B \
             -Dexec.mainClass="otherTest.TestRunner" \
-            ${{ github.event.inputs.browser != '' && format('-Dbrowser={0}', github.event.inputs.browser) || '' }} \
-            ${{ github.event.inputs.tags != '' && format('-Dtags={0}', github.event.inputs.tags) || '' }} \
-            ${{ github.event.inputs.tests != '' && format('-Dtests={0}', github.event.inputs.tests) || '' }} \
-            ${{ github.event.inputs.threads != '' && format('-Dthreads={0}', github.event.inputs.threads) || '' }} \
-            ${{ github.event.inputs.env != '' && format('-Denv={0}', github.event.inputs.env) || '' }} \
-            ${{ github.event.inputs.override_report != '' && format('-DoverrideReport={0}', github.event.inputs.override_report) || '' }}
-        env:
-          TAGS: ${{ github.event.inputs.tags }}
-          TESTS: ${{ github.event.inputs.tests }}
-          BROWSER: ${{ github.event.inputs.browser || 'chrome' }}
-          THREADS: ${{ github.event.inputs.threads || '5' }}
-          ENV: ${{ github.event.inputs.env || 'qa' }}
-          OVERRIDE_REPORT: ${{ github.event.inputs.override_report || 'true' }}
+            -Dtags="${{ github.event.inputs.tags || '' }}" \
+            -Dtests="${{ github.event.inputs.tests || '' }}" \
+            -Dbrowser="${{ github.event.inputs.browser || 'chrome' }}" \
+            -Dthreads="${{ github.event.inputs.threads || '5' }}" \
+            -Denv="${{ github.event.inputs.env || 'qa' }}" \
+            -DoverrideReport="${{ github.event.inputs.override_report || 'true' }}" \
+            -Dparallel="true"
+
+      - name: List generated files
+        run: |
+          echo "=== ExtentReports contents ==="
+          ls -la ExtentReports/ || echo "Directory not found"
+          echo ""
+          echo "=== Test output contents ==="
+          ls -la test-output/ || echo "Directory not found"
 
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
-          path: test-output/
+          name: test-results-${{ github.run_id }}
+          path: |
+            test-output/
+            **/*.xml
           retention-days: 14
+          if-no-files-found: warn
 
       - name: Upload Extent Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: extent-reports
+          name: extent-reports-${{ github.run_id }}
           path: ExtentReports/
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Upload Screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-screenshots
+          name: test-screenshots-${{ github.run_id }}
           path: screenshots/
           retention-days: 14
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
-  # Matrix build for running tests across different browsers
   test-cross-browser:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         browser: [chrome, firefox]
     steps:
@@ -119,21 +136,35 @@ jobs:
           cache: 'maven'
 
       - name: Get dependencies
-        run: mvn dependency:go-offline -B
+        run: mvn dependency:go-offline -B -DskipTests
 
-      - name: Run Tests on ${{ matrix.browser }}
+      - name: Create directories
         run: |
-          mvn test -B \
-            -Dtest=otherTest.TestRunner \
+          mkdir -p ExtentReports test-output screenshots
+
+      - name: Compile and Run Tests on ${{ matrix.browser }}
+        run: |
+          echo "=== Compiling project ==="
+          mvn clean test-compile -B
+          
+          echo ""
+          echo "=== Running tests on ${{ matrix.browser }} ==="
+          mvn exec:java -B \
             -Dexec.mainClass="otherTest.TestRunner" \
-            -Dbrowser=${{ matrix.browser }} \
-            -Dthreads=3
+            -Dtags="smoke" \
+            -Dbrowser="${{ matrix.browser }}" \
+            -Dthreads="3" \
+            -Denv="qa" \
+            -DoverrideReport="true" \
+            -Dparallel="true"
         continue-on-error: true
 
       - name: Upload Results for ${{ matrix.browser }}
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.browser }}
-          path: test-output/
-          retention-days: 7
+          name: test-results-${{ matrix.browser }}-${{ github.run_id }}
+          path: |
+            test-output/
+            ExtentReports/
+          retention-days: 7          if-no-files-found: warn

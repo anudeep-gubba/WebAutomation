@@ -12,6 +12,8 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
   </properties>
 
   <dependencies>
@@ -58,4 +60,69 @@
 <!--      <scope>compile</scope>-->
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+        <configuration>
+          <systemPropertyVariables>
+            <!-- Pass system properties for CI/CD overrides -->
+            <tags>${tags}</tags>
+            <tests>${tests}</tests>
+            <browser>${browser}</browser>
+            <threads>${threads}</threads>
+            <env>${env}</env>
+            <parallel>${parallel}</parallel>
+            <overrideReport>${overrideReport}</overrideReport>
+            <configFile>${configFile}</configFile>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.2.0</version>
+        <configuration>
+          <mainClass>otherTest.TestRunner</mainClass>
+          <systemProperties>
+            <systemProperty>
+              <key>tags</key>
+              <value>${tags}</value>
+            </systemProperty>
+            <systemProperty>
+              <key>tests</key>
+              <value>${tests}</value>
+            </systemProperty>
+            <systemProperty>
+              <key>browser</key>
+              <value>${browser}</value>
+            </systemProperty>
+            <systemProperty>
+              <key>threads</key>
+              <value>${threads}</value>
+            </systemProperty>
+            <systemProperty>
+              <key>env</key>
+              <value>${env}</value>
+            </systemProperty>
+            <systemProperty>
+              <key>parallel</key>
+              <value>${parallel}</value>
+            </systemProperty>
+            <systemProperty>
+              <key>overrideReport</key>
+              <value>${overrideReport}</value>
+            </systemProperty>
+            <systemProperty>
+              <key>configFile</key>
+              <value>${configFile}</value>
+            </systemProperty>
+          </systemProperties>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>

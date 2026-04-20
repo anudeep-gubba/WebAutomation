@@ -1,0 +1,139 @@
+name: Web Automation Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: 'Browser (chrome/firefox/edge)'
+        required: false
+        default: 'chrome'
+      tags:
+        description: 'Test tags to run (comma-separated: smoke,sanity,regression)'
+        required: false
+        default: ''
+      tests:
+        description: 'Specific test IDs to run (comma-separated: TC001,TC002)'
+        required: false
+        default: ''
+      threads:
+        description: 'Number of parallel threads'
+        required: false
+        default: '5'
+      env:
+        description: 'Environment (qa,staging,prod)'
+        required: false
+        default: 'qa'
+      override_report:
+        description: 'Override existing report (true/false)'
+        required: false
+        default: 'true'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      selenium:
+        image: selenium/standalone-chrome:latest
+        ports:
+          - 4444:4444
+        options: --shm-size="2g"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Get dependencies
+        run: mvn dependency:go-offline -B
+
+      - name: Run Tests
+        run: |
+          mvn test -B \
+            -Dtest=otherTest.TestRunner \
+            -Dexec.mainClass="otherTest.TestRunner" \
+            ${{ github.event.inputs.browser != '' && format('-Dbrowser={0}', github.event.inputs.browser) || '' }} \
+            ${{ github.event.inputs.tags != '' && format('-Dtags={0}', github.event.inputs.tags) || '' }} \
+            ${{ github.event.inputs.tests != '' && format('-Dtests={0}', github.event.inputs.tests) || '' }} \
+            ${{ github.event.inputs.threads != '' && format('-Dthreads={0}', github.event.inputs.threads) || '' }} \
+            ${{ github.event.inputs.env != '' && format('-Denv={0}', github.event.inputs.env) || '' }} \
+            ${{ github.event.inputs.override_report != '' && format('-DoverrideReport={0}', github.event.inputs.override_report) || '' }}
+        env:
+          TAGS: ${{ github.event.inputs.tags }}
+          TESTS: ${{ github.event.inputs.tests }}
+          BROWSER: ${{ github.event.inputs.browser || 'chrome' }}
+          THREADS: ${{ github.event.inputs.threads || '5' }}
+          ENV: ${{ github.event.inputs.env || 'qa' }}
+          OVERRIDE_REPORT: ${{ github.event.inputs.override_report || 'true' }}
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-output/
+          retention-days: 14
+
+      - name: Upload Extent Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extent-reports
+          path: ExtentReports/
+          retention-days: 30
+
+      - name: Upload Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-screenshots
+          path: screenshots/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Matrix build for running tests across different browsers
+  test-cross-browser:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        browser: [chrome, firefox]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Get dependencies
+        run: mvn dependency:go-offline -B
+
+      - name: Run Tests on ${{ matrix.browser }}
+        run: |
+          mvn test -B \
+            -Dtest=otherTest.TestRunner \
+            -Dexec.mainClass="otherTest.TestRunner" \
+            -Dbrowser=${{ matrix.browser }} \
+            -Dthreads=3
+        continue-on-error: true
+
+      - name: Upload Results for ${{ matrix.browser }}
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.browser }}
+          path: test-output/
+          retention-days: 7

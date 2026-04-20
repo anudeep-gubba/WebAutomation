@@ -11,35 +11,39 @@ public class Runner {
 
         TestReader reader = new TestReader();
 
-        String testsFile = FileReaderManager.getInstance()
-                .getConfigReader().get("testsFile");
+        // Support config file path override via system property
+        String configPath = System.getProperty("configFile");
 
-        String testDataFile = FileReaderManager.getInstance()
-                .getConfigReader().get("testDataFile");
+        String testsFile = configPath != null
+                ? FileReaderManager.getCustomConfigReader(configPath).get("testsFile")
+                : FileReaderManager.getInstance().getConfigReader().get("testsFile");
 
-        boolean parallel = Boolean.parseBoolean(
-                FileReaderManager.getInstance()
-                        .getConfigReader()
-                        .get("parallel"));
+        String testDataFile = configPath != null
+                ? FileReaderManager.getCustomConfigReader(configPath).get("testDataFile")
+                : FileReaderManager.getInstance().getConfigReader().get("testDataFile");
 
-        int threads = Integer.parseInt(
-                FileReaderManager.getInstance()
-                        .getConfigReader()
-                        .get("threads"));
+        // Support system property override for parallel and threads
+        boolean parallel = System.getProperty("parallel") != null
+                ? Boolean.parseBoolean(System.getProperty("parallel"))
+                : Boolean.parseBoolean(FileReaderManager.getInstance().getConfigReader().get("parallel"));
+
+        int threads = System.getProperty("threads") != null
+                ? Integer.parseInt(System.getProperty("threads"))
+                : Integer.parseInt(FileReaderManager.getInstance().getConfigReader().get("threads"));
 
         String suiteName = FileReaderManager.getInstance()
                 .getConfigReader()
                 .get("suiteName");
 
-        String runTests = FileReaderManager.getInstance()
-                .getConfigReader()
-                .get("runTests", "")
-                .trim();
+        // Support system property override for runTests
+        String runTests = System.getProperty("tests") != null
+                ? System.getProperty("tests")
+                : FileReaderManager.getInstance().getConfigReader().get("runTests", "").trim();
 
-        String runTags = FileReaderManager.getInstance()
-                .getConfigReader()
-                .get("runTags", "")
-                .trim();
+        // Support system property override for runTags
+        String runTags = System.getProperty("tags") != null
+                ? System.getProperty("tags")
+                : FileReaderManager.getInstance().getConfigReader().get("runTags", "").trim();
 
         /* ----------------------------------------
            Convert runTests to Set

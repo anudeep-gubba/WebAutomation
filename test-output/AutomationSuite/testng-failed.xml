@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Failed suite [AutomationSuite]">
+  <listeners>
+    <listener class-name="api.reporting.TestStatusListener"/>
+    <listener class-name="api.reporting.AnnotationTransformer"/>
+  </listeners>
+  <test thread-count="5" name="TC001_ITER_1(failed)">
+    <parameter name="data" value="{iteration=1, email=rahulshettyacademy, password=Learning@830$3mK2}"/>
+    <parameter name="steps" value="[{class=otherTest.LoginTest, method=testLogin}]"/>
+    <classes>
+      <class name="api.WebFramework.DynamicTest">
+        <methods>
+          <include name="execute" invocation-numbers="0"/>
+        </methods>
+      </class> <!-- api.WebFramework.DynamicTest -->
+    </classes>
+  </test> <!-- TC001_ITER_1(failed) -->
+</suite> <!-- Failed suite [AutomationSuite] -->

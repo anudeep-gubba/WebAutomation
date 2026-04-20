@@ -111,14 +111,14 @@ jobs:
 
       - name: Run Smoke Tests on ${{ matrix.browser }}
         run: |
-          mvn exec:java -B \
-            -Dexec.mainClass="otherTest.TestRunner" \
-            -Dtags="smoke" \
-            -Dbrowser="${{ matrix.browser }}" \
-            -Dthreads="3" \
-            -Denv="qa" \
-            -DoverrideReport="true" \
-            -Dparallel="true"
+          mvn test -B \
+            -Dtest=otherTest.SmokeTestSuite \
+            -Dtags=smoke \
+            -Dbrowser=${{ matrix.browser }} \
+            -Dthreads=3 \
+            -Denv=qa \
+            -DoverrideReport=true \
+            -Dparallel=true
 
       - name: Upload Smoke Test Results
         if: always()
@@ -169,14 +169,14 @@ jobs:
 
       - name: Run Regression Tests
         run: |
-          mvn exec:java -B \
-            -Dexec.mainClass="otherTest.TestRunner" \
-            -Dtags="smoke,sanity,regression" \
-            -Dbrowser="${{ github.event.inputs.browser || 'chrome' }}" \
-            -Dthreads="${{ github.event.inputs.threads || '5' }}" \
-            -Denv="${{ github.event.inputs.env || 'qa' }}" \
-            -DoverrideReport="true" \
-            -Dparallel="${{ github.event.inputs.parallel || 'true' }}"
+          mvn test -B \
+            -Dtest=otherTest.SmokeTestSuite \
+            -Dtags=smoke,sanity,regression \
+            -Dbrowser=${{ github.event.inputs.browser || 'chrome' }} \
+            -Dthreads=${{ github.event.inputs.threads || '5' }} \
+            -Denv=${{ github.event.inputs.env || 'qa' }} \
+            -DoverrideReport=true \
+            -Dparallel=${{ github.event.inputs.parallel || 'true' }}
 
       - name: Upload Regression Test Results
         if: always()
@@ -248,14 +248,14 @@ jobs:
             TAGS="sanity"
           fi
           
-          mvn exec:java -B \
-            -Dexec.mainClass="otherTest.TestRunner" \
-            -Dtags="$TAGS" \
-            -Dbrowser="${{ github.event.inputs.browser || 'chrome' }}" \
-            -Dthreads="${{ github.event.inputs.threads || '5' }}" \
-            -Denv="${{ github.event.inputs.env || 'qa' }}" \
-            -DoverrideReport="${{ github.event.inputs.override_report || 'true' }}" \
-            -Dparallel="${{ github.event.inputs.parallel || 'true' }}"
+          mvn test -B \
+            -Dtest=otherTest.SmokeTestSuite \
+            -Dtags=$TAGS \
+            -Dbrowser=${{ github.event.inputs.browser || 'chrome' }} \
+            -Dthreads=${{ github.event.inputs.threads || '5' }} \
+            -Denv=${{ github.event.inputs.env || 'qa' }} \
+            -DoverrideReport=${{ github.event.inputs.override_report || 'true' }} \
+            -Dparallel=${{ github.event.inputs.parallel || 'true' }}
 
       - name: Upload Custom Test Results
         if: always()

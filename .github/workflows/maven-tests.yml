@@ -11,36 +11,10 @@ on:
         description: 'Test Tags (smoke,sanity,regression)'
         required: false
         default: ''
-      tests:
-        description: 'Specific Test IDs (TC001,TC002)'
-        required: false
-        default: ''
       browser:
-        description: 'Browser (chrome/firefox/edge)'
+        description: 'Browser (chrome/firefox)'
         required: false
         default: 'chrome'
-      threads:
-        description: 'Parallel Threads'
-        required: false
-        default: '5'
-      env:
-        description: 'Environment (qa/staging/prod)'
-        required: false
-        default: 'qa'
-      parallel:
-        description: 'Enable Parallel (true/false)'
-        required: false
-        default: 'true'
-      override_report:
-        description: 'Override Report (true/false)'
-        required: false
-        default: 'true'
-
-  schedule:
-    - cron: '0 2 * * *'
-
-env:
-  JAVA_VERSION: '17'
 
 jobs:
   smoke-tests:
@@ -49,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: [chrome, firefox, edge]
+        browser: [chrome]
 
     services:
       selenium:
@@ -62,10 +36,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
+          java-version: '17'
           distribution: 'temurin'
           cache: 'maven'
 
@@ -75,195 +49,26 @@ jobs:
       - name: Create directories
         run: mkdir -p ExtentReports test-output screenshots
 
-      - name: Compile with test classes
+      - name: Compile project
         run: mvn test-compile -B -q
 
-      - name: Run Smoke Tests on ${{ matrix.browser }}
+
+      - name: Run Smoke Tests
         run: |
           mvn exec:java -B \
             -Dexec.mainClass="otherTest.TestRunner" \
             -Dexec.classpathScope=test \
             -Dtags=smoke \
-            -Dbrowser=${{ matrix.browser }} \
-            -Dthreads=3 \
-            -Denv=qa \
-            -Dparallel=true \
-            -DoverrideReport=true
+            -Dbrowser=${{ matrix.browser }}
 
-      - name: Upload Results
+      - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-results-${{ matrix.browser }}-${{ github.run_id }}
+          name: test-results-${{ matrix.browser }}
           path: |
             test-output/
             ExtentReports/
             screenshots/
-          retention-days: 7
+          retention-days: 14
           if-no-files-found: warn
-
-  regression-tests:
-    name: Regression Tests (Scheduled)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'
-
-    services:
-      selenium:
-        image: selenium/standalone-chrome:latest
-        ports:
-          - 4444:4444
-        options: --shm-size="2g"
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: Download dependencies
-        run: mvn dependency:go-offline -B -DskipTests
-
-      - name: Create directories
-        run: mkdir -p ExtentReports test-output screenshots
-
-      - name: Compile with test classes
-        run: mvn test-compile -B -q
-
-      - name: Run Regression Tests
-        run: |
-          mvn exec:java -B \
-            -Dexec.mainClass="otherTest.TestRunner" \
-            -Dexec.classpathScope=test \
-            -Dtags=smoke,sanity,regression \
-            -Dbrowser=chrome \
-            -Dthreads=5 \
-            -Denv=qa \
-            -Dparallel=true \
-            -DoverrideReport=true
-
-      - name: Upload Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: regression-results-${{ github.run_id }}
-          path: |
-            test-output/
-            ExtentReports/
-            screenshots/
-          retention-days: 30
-          if-no-files-found: warn
-
-  custom-tests:
-    name: Custom Tests
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-
-    services:
-      selenium:
-        image: selenium/standalone-${{ github.event.inputs.browser || 'chrome' }}:latest
-        ports:
-          - 4444:4444
-        options: --shm-size="2g"
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: Download dependencies
-        run: mvn dependency:go-offline -B -DskipTests
-
-      - name: Create directories
-        run: mkdir -p ExtentReports test-output screenshots
-
-      - name: Compile with test classes
-        run: mvn test-compile -B -q
-
-      - name: Display parameters
-        run: |
-          echo "========================================"
-          echo "  Custom Test Parameters"
-          echo "========================================"
-          echo "  Tags: ${{ github.event.inputs.tags || '(config default)' }}"
-          echo "  Tests: ${{ github.event.inputs.tests || '(config default)' }}"
-          echo "  Browser: ${{ github.event.inputs.browser || 'chrome' }}"
-          echo "  Threads: ${{ github.event.inputs.threads || '5' }}"
-          echo "  Environment: ${{ github.event.inputs.env || 'qa' }}"
-          echo "  Parallel: ${{ github.event.inputs.parallel || 'true' }}"
-          echo "  Override Report: ${{ github.event.inputs.override_report || 'true' }}"
-          echo "========================================"
-
-      - name: Run Custom Tests
-        run: |
-          mvn exec:java -B \
-            -Dexec.mainClass="otherTest.TestRunner" \
-            -Dexec.classpathScope=test \
-            -Dtags="${{ github.event.inputs.tags || '' }}" \
-            -Dtests="${{ github.event.inputs.tests || '' }}" \
-            -Dbrowser=${{ github.event.inputs.browser || 'chrome' }} \
-            -Dthreads=${{ github.event.inputs.threads || '5' }} \
-            -Denv=${{ github.event.inputs.env || 'qa' }} \
-            -Dparallel=${{ github.event.inputs.parallel || 'true' }} \
-            -DoverrideReport=${{ github.event.inputs.override_report || 'true' }}
-
-      - name: Upload Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: custom-results-${{ github.run_id }}
-          path: |
-            test-output/
-            ExtentReports/
-            screenshots/
-          retention-days: 30
-          if-no-files-found: warn
-
-  publish-reports:
-    name: Publish Test Reports
-    runs-on: ubuntu-latest
-    needs: [smoke-tests]
-    if: always()
-    permissions:
-      pages: write
-      id-token: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Create directories
-        run: mkdir -p ExtentReports test-output
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: downloaded-reports
-          pattern: smoke-results-*
-          merge-multiple: true
-
-      - name: List reports
-        run: |
-          echo "=== ExtentReports ==="
-          ls -la downloaded-reports/ExtentReports/ 2>/dev/null || echo "No reports found"
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload Reports
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: downloaded-reports/ExtentReports/
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4

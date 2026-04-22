@@ -14,7 +14,7 @@ public class YamlReader {
             Yaml yaml = new Yaml();
 
             FileInputStream fis = new FileInputStream(
-                    System.getProperty("user.dir") + "/resources/" + file);
+                    System.getProperty("user.dir") + "/src/main/resources/" + file);
 
             return yaml.load(fis);
 

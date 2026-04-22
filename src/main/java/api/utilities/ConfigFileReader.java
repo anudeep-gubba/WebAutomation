@@ -10,9 +10,18 @@ import java.util.Properties;
 
 public class ConfigFileReader {
     private Properties properties;
-    private final String propertyFilePath = "config.properties";
+    private String propertyFilePath = "config.properties";
 
     public ConfigFileReader() {
+        loadProperties();
+    }
+
+    public ConfigFileReader(String customPath) {
+        this.propertyFilePath = customPath;
+        loadProperties();
+    }
+
+    private void loadProperties() {
         String baseDir = System.getProperty("user.dir");
 
         String[] possiblePaths = {
